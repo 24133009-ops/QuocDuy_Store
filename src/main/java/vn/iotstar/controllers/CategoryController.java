@@ -1,0 +1,123 @@
+package vn.iotstar.controllers;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.List;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
+
+import vn.iotstar.daos.impl.CategoryDaoImpl;
+import vn.iotstar.entities.Category;
+
+@MultipartConfig(
+        fileSizeThreshold = 1024 * 1024 * 2,  // 2MB
+        maxFileSize = 1024 * 1024 * 10,       // 10MB
+        maxRequestSize = 1024 * 1024 * 50    // 50MB
+)
+@WebServlet(urlPatterns = {
+        "/admin/categories",
+        "/admin/category/add",
+        "/admin/category/insert",
+        "/admin/category/edit",
+        "/admin/category/update",
+        "/admin/category/delete"
+})
+public class CategoryController extends HttpServlet {
+    private static final long serialVersionUID = 1L;
+    private CategoryDaoImpl cateDao = new CategoryDaoImpl();
+    public static final String UPLOAD_DIR = "C:/upload";
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String uri = req.getRequestURI();
+
+        if (uri.contains("/admin/categories")) {
+            List<Category> list = cateDao.findAll();
+            req.setAttribute("listcate", list);
+            req.getRequestDispatcher("/views/admin/category-list.jsp").forward(req, resp);
+        } else if (uri.contains("/admin/category/add")) {
+            req.getRequestDispatcher("/views/admin/category-add.jsp").forward(req, resp);
+        } else if (uri.contains("/admin/category/edit")) {
+            int id = Integer.parseInt(req.getParameter("id"));
+            Category category = cateDao.findById(id);
+            req.setAttribute("cate", category);
+            req.getRequestDispatcher("/views/admin/category-edit.jsp").forward(req, resp);
+        } else if (uri.contains("/admin/category/delete")) {
+            try {
+                int id = Integer.parseInt(req.getParameter("id"));
+                cateDao.delete(id);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            resp.sendRedirect(req.getContextPath() + "/admin/categories");
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        req.setCharacterEncoding("UTF-8");
+        resp.setCharacterEncoding("UTF-8");
+        String uri = req.getRequestURI();
+
+        // 1. Thêm danh mục mới
+        if (uri.contains("/admin/category/insert")) {
+            String categoryname = req.getParameter("categoryname");
+            int status = Integer.parseInt(req.getParameter("status"));
+            String imageUrl = req.getParameter("images"); // Link URL online
+
+            Category cate = new Category();
+            cate.setCategoryname(categoryname);
+            cate.setStatus(status);
+
+            // Ưu tiên 1: Tải file từ máy tính (images1)
+            Part part = req.getPart("images1");
+            if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
+                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                File uploadDir = new File(UPLOAD_DIR);
+                if (!uploadDir.exists()) uploadDir.mkdirs();
+                part.write(UPLOAD_DIR + File.separator + filename);
+                cate.setImages(filename);
+            }
+            // Ưu tiên 2: Nhập link ảnh trực tiếp
+            else if (imageUrl != null && !imageUrl.trim().isEmpty()) {
+                cate.setImages(imageUrl.trim());
+            }
+
+            cateDao.insert(cate);
+            resp.sendRedirect(req.getContextPath() + "/admin/categories");
+        }
+        // 2. Cập nhật danh mục
+        else if (uri.contains("/admin/category/update")) {
+            int categoryId = Integer.parseInt(req.getParameter("categoryId"));
+            String categoryname = req.getParameter("categoryname");
+            int status = Integer.parseInt(req.getParameter("status"));
+            String imageUrl = req.getParameter("images"); // Link URL online nếu có
+
+            Category cate = cateDao.findById(categoryId);
+            cate.setCategoryname(categoryname);
+            cate.setStatus(status);
+
+            Part part = req.getPart("images1");
+            if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
+                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                File uploadDir = new File(UPLOAD_DIR);
+                if (!uploadDir.exists()) uploadDir.mkdirs();
+                part.write(UPLOAD_DIR + File.separator + filename);
+                cate.setImages(filename);
+            } else if (imageUrl != null && !imageUrl.trim().isEmpty()) {
+                cate.setImages(imageUrl.trim());
+            }
+            // Nếu không chọn file mới và không nhập URL mới thì cate.getImages() cũ vẫn được giữ nguyên
+
+            cateDao.update(cate);
+            resp.sendRedirect(req.getContextPath() + "/admin/categories");
+        }
+    }
+}
