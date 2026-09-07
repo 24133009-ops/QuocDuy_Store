@@ -16,6 +16,7 @@
             --apple-blue-hover: #0077ed;
             --border-color: #d2d2d7;
             --border-focus: #0071e3;
+            --apple-red: #ff3b30;
         }
 
         * {
@@ -80,6 +81,20 @@
             margin-top: 6px;
         }
 
+        /* Thông báo lỗi từ Server gửi sang */
+        .alert-apple-error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-size: 14px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .form-card {
             background: var(--card-bg);
             backdrop-filter: blur(20px);
@@ -125,6 +140,19 @@
         input[type="text"]:focus {
             border-color: var(--border-focus);
             box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+        }
+
+        /* Trạng thái lỗi khi Client Validation kích hoạt */
+        input[type="text"].input-error {
+            border-color: var(--apple-red) !important;
+            box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.15) !important;
+        }
+
+        .invalid-feedback {
+            color: var(--apple-red);
+            font-size: 12px;
+            margin-top: 6px;
+            display: none;
         }
 
         .file-upload-box {
@@ -248,25 +276,38 @@
             <p>Khởi tạo nhóm thiết bị mới cho hệ thống Quốc Duy Store</p>
         </div>
 
+        <!-- Thông báo lỗi từ Servlet (Server-side validation) -->
+        <c:if test="${not empty error}">
+            <div class="alert-apple-error">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span>${error}</span>
+            </div>
+        </c:if>
+
         <div class="form-card">
-            <form action="<c:url value='/admin/category/insert'/>" method="post" enctype="multipart/form-data">
+            <!-- Thêm novalidate để tự xử lý validation bằng JS theo style Apple -->
+            <form id="categoryForm" action="<c:url value='/admin/category/insert'/>" method="post" enctype="multipart/form-data" novalidate>
                 <div class="form-group">
-                    <label for="categoryname">Tên danh mục thiết bị</label>
-                    <input type="text" id="categoryname" name="categoryname" placeholder="Ví dụ: iPad Pro, AirPods Max..." required autofocus>
+                    <label for="categoryname">Tên danh mục thiết bị <span style="color: var(--apple-red);">*</span></label>
+                    <input type="text" id="categoryname" name="categoryname" value="${param.categoryname}" placeholder="Ví dụ: iPad Pro, AirPods Max..." autofocus>
+                    <div id="categoryNameError" class="invalid-feedback">Vui lòng không để trống tên danh mục thiết bị!</div>
                 </div>
 
                 <div class="form-group">
                     <label for="images">Đường dẫn hình ảnh (URL Online)</label>
-                    <input type="text" id="images" name="images" placeholder="https://images.unsplash.com/...">
+                    <input type="text" id="images" name="images" value="${param.images}" placeholder="https://images.unsplash.com/...">
                     <div class="hint">Dán trực tiếp URL ảnh sắc nét từ web</div>
                 </div>
 
                 <div class="form-group">
                     <label>Hoặc tải ảnh từ máy tính</label>
-                    <div class="file-upload-box">
-                        <input type="file" id="images1" name="images1" accept="image/*">
+                    <div class="file-upload-box" onclick="document.getElementById('images1').click();">
+                        <input type="file" id="images1" name="images1" accept="image/png, image/jpeg, image/webp">
                     </div>
                     <div class="hint">Định dạng hỗ trợ: PNG, JPG, WebP</div>
+                    <div id="fileError" class="invalid-feedback">Chỉ chấp nhận định dạng ảnh PNG, JPG, JPEG hoặc WEBP!</div>
                 </div>
 
                 <div class="form-group" style="margin-top: 26px;">
@@ -290,6 +331,57 @@
             </form>
         </div>
     </div>
+
+    <script>
+        // Client-side Validation chuẩn giao diện Apple
+        const form = document.getElementById('categoryForm');
+        const categoryNameInput = document.getElementById('categoryname');
+        const categoryNameError = document.getElementById('categoryNameError');
+        const fileInput = document.getElementById('images1');
+        const fileError = document.getElementById('fileError');
+
+        form.addEventListener('submit', function (e) {
+            let isValid = true;
+
+            // 1. Kiểm tra không được để trống tên danh mục
+            if (categoryNameInput.value.trim() === '') {
+                categoryNameInput.classList.add('input-error');
+                categoryNameError.style.display = 'block';
+                categoryNameInput.focus();
+                isValid = false;
+            } else {
+                categoryNameInput.classList.remove('input-error');
+                categoryNameError.style.display = 'none';
+            }
+
+            // 2. Kiểm tra định dạng file tải lên nếu có chọn file
+            if (fileInput.files.length > 0) {
+                const fileName = fileInput.files[0].name.toLowerCase();
+                const validExtensions = ['.png', '.jpg', '.jpeg', '.webp'];
+                const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext));
+
+                if (!hasValidExt) {
+                    fileError.style.display = 'block';
+                    isValid = false;
+                } else {
+                    fileError.style.display = 'none';
+                }
+            }
+
+            // Chặn gửi form nếu có lỗi
+            if (!isValid) {
+                e.preventDefault();
+            }
+        });
+
+        // Tự động tắt lỗi đỏ khi người dùng gõ phím
+        categoryNameInput.addEventListener('input', function() {
+            if (this.value.trim() !== '') {
+                this.classList.remove('input-error');
+                categoryNameError.style.display = 'none';
+            }
+        });
+    </script>
 
 </body>
 </html>

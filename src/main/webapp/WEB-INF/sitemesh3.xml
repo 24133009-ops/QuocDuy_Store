@@ -1,0 +1,12 @@
+<sitemesh>
+    <mapping path="/*" decorator="/decorators/web.jsp"/>
+
+    <!-- Các trang không bọc template -->
+    <mapping path="/login" exclude="true"/>
+    <mapping path="/register" exclude="true"/>
+    <mapping path="/verify-otp" exclude="true"/>
+    <mapping path="/forgot-password" exclude="true"/>
+    <mapping path="/reset-password" exclude="true"/>
+    <mapping path="/assets/*" exclude="true"/>
+    <mapping path="/uploads/*" exclude="true"/>
+</sitemesh>

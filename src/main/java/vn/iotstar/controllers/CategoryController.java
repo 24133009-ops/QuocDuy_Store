@@ -19,7 +19,7 @@ import vn.iotstar.entities.Category;
 @MultipartConfig(
         fileSizeThreshold = 1024 * 1024 * 2,  // 2MB
         maxFileSize = 1024 * 1024 * 10,       // 10MB
-        maxRequestSize = 1024 * 1024 * 50    // 50MB
+        maxRequestSize = 1024 * 1024 * 50     // 50MB
 )
 @WebServlet(urlPatterns = {
         "/admin/categories",
@@ -45,10 +45,14 @@ public class CategoryController extends HttpServlet {
         } else if (uri.contains("/admin/category/add")) {
             req.getRequestDispatcher("/views/admin/category-add.jsp").forward(req, resp);
         } else if (uri.contains("/admin/category/edit")) {
-            int id = Integer.parseInt(req.getParameter("id"));
-            Category category = cateDao.findById(id);
-            req.setAttribute("cate", category);
-            req.getRequestDispatcher("/views/admin/category-edit.jsp").forward(req, resp);
+            try {
+                int id = Integer.parseInt(req.getParameter("id"));
+                Category category = cateDao.findById(id);
+                req.setAttribute("cate", category);
+                req.getRequestDispatcher("/views/admin/category-edit.jsp").forward(req, resp);
+            } catch (Exception e) {
+                resp.sendRedirect(req.getContextPath() + "/admin/categories");
+            }
         } else if (uri.contains("/admin/category/delete")) {
             try {
                 int id = Integer.parseInt(req.getParameter("id"));
@@ -69,23 +73,44 @@ public class CategoryController extends HttpServlet {
         // 1. Thêm danh mục mới
         if (uri.contains("/admin/category/insert")) {
             String categoryname = req.getParameter("categoryname");
-            int status = Integer.parseInt(req.getParameter("status"));
-            String imageUrl = req.getParameter("images"); // Link URL online
+            String statusParam = req.getParameter("status");
+            String imageUrl = req.getParameter("images");
+            Part part = req.getPart("images1");
 
+            // --- SERVER-SIDE VALIDATION ---
+            if (categoryname == null || categoryname.trim().isEmpty()) {
+                req.setAttribute("error", "Tên danh mục thiết bị không được để trống!");
+                req.getRequestDispatcher("/views/admin/category-add.jsp").forward(req, resp);
+                return;
+            }
+
+            // Kiểm tra định dạng file nếu có upload ảnh
+            if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
+                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString().toLowerCase();
+                if (!filename.endsWith(".jpg") && !filename.endsWith(".jpeg") && !filename.endsWith(".png") && !filename.endsWith(".webp")) {
+                    req.setAttribute("error", "Chỉ chấp nhận file ảnh định dạng PNG, JPG, JPEG hoặc WEBP!");
+                    req.getRequestDispatcher("/views/admin/category-add.jsp").forward(req, resp);
+                    return;
+                }
+            }
+
+            int status = (statusParam != null) ? Integer.parseInt(statusParam) : 1;
             Category cate = new Category();
-            cate.setCategoryname(categoryname);
+            cate.setCategoryname(categoryname.trim());
             cate.setStatus(status);
 
-            // Ưu tiên 1: Tải file từ máy tính (images1)
-            Part part = req.getPart("images1");
+            // Ưu tiên 1: Tải file từ máy tính
             if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
-                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                String originalFilename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                String ext = originalFilename.substring(originalFilename.lastIndexOf("."));
+                String newFilename = "category_" + System.currentTimeMillis() + ext;
+
                 File uploadDir = new File(UPLOAD_DIR);
                 if (!uploadDir.exists()) uploadDir.mkdirs();
-                part.write(UPLOAD_DIR + File.separator + filename);
-                cate.setImages(filename);
+                part.write(UPLOAD_DIR + File.separator + newFilename);
+                cate.setImages(newFilename);
             }
-            // Ưu tiên 2: Nhập link ảnh trực tiếp
+            // Ưu tiên 2: Nhập URL ảnh online
             else if (imageUrl != null && !imageUrl.trim().isEmpty()) {
                 cate.setImages(imageUrl.trim());
             }
@@ -97,24 +122,47 @@ public class CategoryController extends HttpServlet {
         else if (uri.contains("/admin/category/update")) {
             int categoryId = Integer.parseInt(req.getParameter("categoryId"));
             String categoryname = req.getParameter("categoryname");
-            int status = Integer.parseInt(req.getParameter("status"));
-            String imageUrl = req.getParameter("images"); // Link URL online nếu có
+            String statusParam = req.getParameter("status");
+            String imageUrl = req.getParameter("images");
+            Part part = req.getPart("images1");
 
             Category cate = cateDao.findById(categoryId);
-            cate.setCategoryname(categoryname);
+
+            // --- SERVER-SIDE VALIDATION ---
+            if (categoryname == null || categoryname.trim().isEmpty()) {
+                req.setAttribute("error", "Tên danh mục thiết bị không được để trống!");
+                req.setAttribute("cate", cate);
+                req.getRequestDispatcher("/views/admin/category-edit.jsp").forward(req, resp);
+                return;
+            }
+
+            // Kiểm tra định dạng file nếu người dùng chọn upload ảnh mới
+            if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
+                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString().toLowerCase();
+                if (!filename.endsWith(".jpg") && !filename.endsWith(".jpeg") && !filename.endsWith(".png") && !filename.endsWith(".webp")) {
+                    req.setAttribute("error", "Chỉ chấp nhận file ảnh định dạng PNG, JPG, JPEG hoặc WEBP!");
+                    req.setAttribute("cate", cate);
+                    req.getRequestDispatcher("/views/admin/category-edit.jsp").forward(req, resp);
+                    return;
+                }
+            }
+
+            int status = (statusParam != null) ? Integer.parseInt(statusParam) : cate.getStatus();
+            cate.setCategoryname(categoryname.trim());
             cate.setStatus(status);
 
-            Part part = req.getPart("images1");
             if (part != null && part.getSize() > 0 && part.getSubmittedFileName() != null && !part.getSubmittedFileName().trim().isEmpty()) {
-                String filename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                String originalFilename = Paths.get(part.getSubmittedFileName()).getFileName().toString();
+                String ext = originalFilename.substring(originalFilename.lastIndexOf("."));
+                String newFilename = "category_" + System.currentTimeMillis() + ext;
+
                 File uploadDir = new File(UPLOAD_DIR);
                 if (!uploadDir.exists()) uploadDir.mkdirs();
-                part.write(UPLOAD_DIR + File.separator + filename);
-                cate.setImages(filename);
+                part.write(UPLOAD_DIR + File.separator + newFilename);
+                cate.setImages(newFilename);
             } else if (imageUrl != null && !imageUrl.trim().isEmpty()) {
                 cate.setImages(imageUrl.trim());
             }
-            // Nếu không chọn file mới và không nhập URL mới thì cate.getImages() cũ vẫn được giữ nguyên
 
             cateDao.update(cate);
             resp.sendRedirect(req.getContextPath() + "/admin/categories");
